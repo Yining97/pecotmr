@@ -495,15 +495,6 @@ setGeneric("getWeights", function(x, ...) standardGeneric("getWeights"))
 setGeneric("getStandardized",
   function(x, ...) standardGeneric("getStandardized"))
 
-#' @title Get CV Performance
-#' @description Extract cross-validation performance metrics.
-#' @param x A \code{TwasWeightsEntry} or \code{TwasWeights}.
-#' @param ... Class-specific selection arguments.
-#' @return Method-specific (typically a list).
-#' @export
-setGeneric("getCvPerformance",
-  function(x, ...) standardGeneric("getCvPerformance"))
-
 #' @title Get Model Fits
 #' @description Extract fitted model objects.
 #' @param x A \code{TwasWeightsEntry} or \code{TwasWeights}.
@@ -511,6 +502,24 @@ setGeneric("getCvPerformance",
 #' @return Method-specific (typically a list).
 #' @export
 setGeneric("getFits", function(x, ...) standardGeneric("getFits"))
+
+#' @title Get the Full-Data Prior from a MashPrior
+#' @description Accessor for the \code{fullFit} slot (the full-data data-driven
+#'   prior payload).
+#' @param x A \code{MashPrior} object.
+#' @param ... Unused.
+#' @return The full-data prior payload, or \code{NULL}.
+#' @export
+setGeneric("getFullFit", function(x, ...) standardGeneric("getFullFit"))
+
+#' @title Get the Per-Fold Priors from a MashPrior
+#' @description Accessor for the \code{cvFits} slot (per-fold priors +
+#'   \code{samplePartition}).
+#' @param x A \code{MashPrior} object.
+#' @param ... Unused.
+#' @return The \code{cvFits} list, or \code{NULL}.
+#' @export
+setGeneric("getCvFits", function(x, ...) standardGeneric("getCvFits"))
 
 #' @title Get Method Names
 #' @description Extract method names from a collection class.
@@ -846,3 +855,68 @@ setGeneric("getTauBlocks", function(x) standardGeneric("getTauBlocks"))
 #' @return Numeric (length 1).
 #' @export
 setGeneric("getH2", function(x) standardGeneric("getH2"))
+
+# Internal generics for the unified joint-analysis engine (see R/JointGroup.R
+# and dev/jointSpecification-s4-refactor.md). Not exported: the engine and its
+# fitters are package-internal machinery.
+
+# fitJointGroup(group, pipeline, token, args) -- multiple dispatch on
+# (JointGroup subclass, JointPipeline subclass). The 4 irreducible joint fits
+# (individual/sumstats x fm/twas). Returns one fit entry (FineMappingEntry or
+# TwasWeightsEntry).
+setGeneric("fitJointGroup",
+  function(group, pipeline, token, args) standardGeneric("fitJointGroup"))
+
+# construct(pipeline, rows) -- assemble the per-pipeline result collection
+# (QtlFineMappingResult vs TwasWeights) from accumulated joint rows. The joint
+# row identity (which axes collapse to "joint" + jointStudies/Contexts/Traits)
+# is derived from each group's `conditions` by the rows accumulator.
+setGeneric("construct",
+  function(pipeline, rows, ...) standardGeneric("construct"))
+
+# ---- SldscData accessors ----
+#' @title Get the annotation table from an SldscData
+#' @param x An \code{\link{SldscData}} object.
+#' @return A \code{data.frame} of annotations (CHR, SNP, annotation columns).
+#' @rdname getAnnotData
+#' @export
+setGeneric("getAnnotData", function(x) standardGeneric("getAnnotData"))
+
+#' @title Get the allele-frequency table from an SldscData
+#' @param x An \code{\link{SldscData}} object.
+#' @return A \code{data.frame} of reference-panel frequencies (SNP, MAF).
+#' @rdname getFrqData
+#' @export
+setGeneric("getFrqData", function(x) standardGeneric("getFrqData"))
+
+#' @title Get the per-trait runs list from an SldscData
+#' @param x An \code{\link{SldscData}} object.
+#' @return The named list of per-trait \code{single}/\code{joint} runs.
+#' @rdname getTraitRuns
+#' @export
+setGeneric("getTraitRuns", function(x) standardGeneric("getTraitRuns"))
+
+#' @title Get the trait names from an SldscData
+#' @param x An \code{\link{SldscData}} object.
+#' @return A character vector of trait names.
+#' @rdname getTraitNames
+#' @export
+setGeneric("getTraitNames", function(x) standardGeneric("getTraitNames"))
+
+#' @title Get the annotation column names from an SldscData
+#' @param x An \code{\link{SldscData}} object.
+#' @return A character vector of annotation column names.
+#' @rdname getAnnotCols
+#' @export
+setGeneric("getAnnotCols", function(x) standardGeneric("getAnnotCols"))
+
+#' @title Get one trait's run from an SldscData
+#' @param x An \code{\link{SldscData}} object.
+#' @param trait Character. Trait name.
+#' @param ... Further arguments: \code{mode} (\code{"single"}/\code{"joint"})
+#'   and \code{idx} (which single run).
+#' @return A single run list, the list of single runs, or \code{NULL}.
+#' @rdname getTraitRun
+#' @export
+setGeneric("getTraitRun",
+  function(x, trait, ...) standardGeneric("getTraitRun"))

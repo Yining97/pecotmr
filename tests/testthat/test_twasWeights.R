@@ -765,313 +765,15 @@ test_that("twasWeightsCv: multivariate Y with multiple columns", {
 #
 # ===========================================================================
 
-test_that("twasWeightsPipeline: returns list with expected structure (mocked)", {
-  d <- make_data(n = 50, p = 10)
-  y_vec <- as.numeric(d$Y)
 
-  local_mocked_bindings(
-    susie = mock_susie,
-    enetWeights  = function(X, y, ...) rep(0.1, ncol(X)),
-    lassoWeights = function(X, y, ...) rep(0.2, ncol(X)),
-    bayesRWeights = function(X, y, ...) rep(0, ncol(X)),
-    bayesCWeights = function(X, y, ...) rep(0, ncol(X)),
-    mrashWeights = function(X, y, ...) rep(0, ncol(X)),
-    mcpWeights   = function(X, y, ...) rep(0, ncol(X)),
-    scadWeights  = function(X, y, ...) rep(0, ncol(X)),
-    l0learnWeights =function(X, y, ...) rep(0, ncol(X)),
-    susieWeights = function(X, y, ...) rep(0, ncol(X)),
-    susieInfWeights = function(X, y, ...) rep(0, ncol(X))
-  )
 
-  result <- pecotmr:::.twasWeightsPipelineMatrix(d$X, y_vec, susieFit = NULL, cvFolds = 0,
-                                  estimatePi = FALSE)
 
-  expect_true(is.list(result))
-  expect_true("twasWeights" %in% names(result))
-  expect_true("twasPredictions" %in% names(result))
-  expect_true("totalTimeElapsed" %in% names(result))
-  # Verify that mock values appear in the weight matrices
-  enet_w <- .weightsByMethod(result$twasWeights, "enet")
-  expect_true(all(enet_w[, 1] == 0.1))
-  lasso_w <- .weightsByMethod(result$twasWeights, "lasso")
-  expect_true(all(lasso_w[, 1] == 0.2))
-  # The number of weight methods should equal the 10 default methods
-  expect_equal(length(getMethodNames(result$twasWeights)), 10)
-})
 
-test_that("twasWeightsPipeline: twasWeights contains all default methods", {
-  d <- make_data(n = 50, p = 10)
-  y_vec <- as.numeric(d$Y)
 
-  local_mocked_bindings(
-    susie = mock_susie,
-    enetWeights  = function(X, y, ...) rep(0.1, ncol(X)),
-    lassoWeights = function(X, y, ...) rep(0.2, ncol(X)),
-    bayesRWeights = function(X, y, ...) rep(0, ncol(X)),
-    bayesCWeights = function(X, y, ...) rep(0, ncol(X)),
-    mrashWeights = function(X, y, ...) rep(0, ncol(X)),
-    mcpWeights   = function(X, y, ...) rep(0, ncol(X)),
-    scadWeights  = function(X, y, ...) rep(0, ncol(X)),
-    l0learnWeights =function(X, y, ...) rep(0, ncol(X)),
-    susieWeights = function(X, y, ...) rep(0, ncol(X)),
-    susieInfWeights = function(X, y, ...) rep(0, ncol(X))
-  )
 
-  result <- pecotmr:::.twasWeightsPipelineMatrix(d$X, y_vec, susieFit = NULL, cvFolds = 0,
-                                  estimatePi = FALSE)
 
-  expected_methods <- c(
-    "enet", "lasso", "bayes_r",
-    "bayes_c", "mrash", "mcp",
-    "scad", "l0learn", "susie",
-    "susie_inf"
-  )
-  expect_true(all(expected_methods %in% getMethodNames(result$twasWeights)))
-})
 
-test_that("twasWeightsPipeline: stores ensemble weights when ensemble is fitted", {
-  d <- make_data(n = 50, p = 10)
-  y_vec <- as.numeric(d$Y)
 
-  cv_perf <- matrix(NA_real_, nrow = 1, ncol = 6)
-  colnames(cv_perf) <- c("corr", "rsq", "adj_rsq", "pval", "RMSE", "MAE")
-  rownames(cv_perf) <- "outcome_1"
-  cv_perf[1, "rsq"] <- 0.5
-
-  local_mocked_bindings(
-    enetWeights = function(X, y, ...) rep(0.1, ncol(X)),
-    lassoWeights = function(X, y, ...) rep(0.2, ncol(X)),
-    twasWeightsCv = function(X, Y, ...) {
-      list(
-        prediction = list(
-          enetPredicted = matrix(as.numeric(Y), ncol = 1, dimnames = list(rownames(X), "outcome_1")),
-          lassoPredicted = matrix(as.numeric(Y), ncol = 1, dimnames = list(rownames(X), "outcome_1"))
-        ),
-        performance = list(
-          enetPerformance = cv_perf,
-          lassoPerformance = cv_perf
-        )
-      )
-    },
-    ensembleWeights = function(cvResults, Y, twasWeightList, ...) {
-      list(
-        methodCoef = c(enet = 0.5, lasso = 0.5),
-        ensembleTwasWeights = (twasWeightList$enet_weights + twasWeightList$lasso_weights) / 2
-      )
-    }
-  )
-
-  result <- pecotmr:::.twasWeightsPipelineMatrix(
-    d$X, y_vec,
-    weightMethods = list(enetWeights = list(), lassoWeights = list()),
-    cvFolds = 2,
-    ensemble = TRUE,
-    ensembleR2Threshold = 0,
-    estimatePi = FALSE
-  )
-
-  expect_true("ensemble" %in% getMethodNames(result$twasWeights))
-  expect_true("ensemble_predicted" %in% names(result$twasPredictions))
-  expect_true("ensemble" %in% names(result))
-})
-
-test_that("twasWeightsPipeline: predictions have _predicted suffix", {
-  d <- make_data(n = 50, p = 10)
-  y_vec <- as.numeric(d$Y)
-
-  local_mocked_bindings(
-    susie = mock_susie,
-    enetWeights  = function(X, y, ...) rep(0, ncol(X)),
-    lassoWeights = function(X, y, ...) rep(0, ncol(X)),
-    bayesRWeights = function(X, y, ...) rep(0, ncol(X)),
-    bayesCWeights = function(X, y, ...) rep(0, ncol(X)),
-    mrashWeights = function(X, y, ...) rep(0, ncol(X)),
-    mcpWeights   = function(X, y, ...) rep(0, ncol(X)),
-    scadWeights  = function(X, y, ...) rep(0, ncol(X)),
-    l0learnWeights =function(X, y, ...) rep(0, ncol(X)),
-    susieWeights = function(X, y, ...) rep(0, ncol(X)),
-    susieInfWeights = function(X, y, ...) rep(0, ncol(X))
-  )
-
-  result <- pecotmr:::.twasWeightsPipelineMatrix(d$X, y_vec, susieFit = NULL, cvFolds = 0,
-                                  estimatePi = FALSE)
-
-  expected_pred_names <- c(
-    "enet_predicted", "lasso_predicted", "bayes_r_predicted",
-    "bayes_c_predicted", "mrash_predicted", "mcp_predicted",
-    "scad_predicted", "l0learn_predicted", "susie_predicted",
-    "susie_inf_predicted"
-  )
-  expect_true(all(expected_pred_names %in% names(result$twasPredictions)))
-})
-
-test_that("twasWeightsPipeline: cv_folds=0 skips cross-validation", {
-  d <- make_data(n = 50, p = 10)
-  y_vec <- as.numeric(d$Y)
-
-  local_mocked_bindings(
-    susie = mock_susie,
-    enetWeights  = function(X, y, ...) rep(0, ncol(X)),
-    lassoWeights = function(X, y, ...) rep(0, ncol(X)),
-    bayesRWeights = function(X, y, ...) rep(0, ncol(X)),
-    bayesCWeights = function(X, y, ...) rep(0, ncol(X)),
-    mrashWeights = function(X, y, ...) rep(0, ncol(X)),
-    mcpWeights   = function(X, y, ...) rep(0, ncol(X)),
-    scadWeights  = function(X, y, ...) rep(0, ncol(X)),
-    l0learnWeights =function(X, y, ...) rep(0, ncol(X)),
-    susieWeights = function(X, y, ...) rep(0, ncol(X)),
-    susieInfWeights = function(X, y, ...) rep(0, ncol(X))
-  )
-
-  result <- pecotmr:::.twasWeightsPipelineMatrix(d$X, y_vec, susieFit = NULL, cvFolds = 0,
-                                  estimatePi = FALSE)
-
-  expect_false("twasCvResult" %in% names(result))
-  # All mock weights were zero, so all predictions should be zero
-  for (pred_name in names(result$twasPredictions)) {
-    expect_true(all(result$twasPredictions[[pred_name]] == 0),
-                info = paste("Non-zero prediction in", pred_name))
-  }
-  # Weight dimensions should match ncol(X)
-  for (w_name in getMethodNames(result$twasWeights)) {
-    expect_equal(nrow(.weightsByMethod(result$twasWeights, w_name)), ncol(d$X),
-                 info = paste("Wrong nrow for", w_name))
-  }
-})
-
-test_that("twasWeightsPipeline: custom weight_methods are respected", {
-  d <- make_data(n = 50, p = 10)
-  y_vec <- as.numeric(d$Y)
-
-  local_mocked_bindings(
-    lassoWeights = function(X, y, ...) rep(1, ncol(X)),
-    enetWeights  = function(X, y, ...) rep(2, ncol(X))
-  )
-
-  result <- pecotmr:::.twasWeightsPipelineMatrix(
-    d$X, y_vec, susieFit = NULL, cvFolds = 0,
-    weightMethods = list(lassoWeights = list(), enetWeights = list())
-  )
-
-  expect_equal(sort(getMethodNames(result$twasWeights)), sort(c("lasso", "enet")))
-})
-
-test_that("twasWeightsPipeline: accepts 'fast_default' preset string", {
-  d <- make_data(n = 50, p = 10)
-  y_vec <- as.numeric(d$Y)
-
-  local_mocked_bindings(
-    susie = mock_susie,
-    enetWeights  = function(X, y, ...) rep(0, ncol(X)),
-    lassoWeights = function(X, y, ...) rep(0, ncol(X)),
-    mrashWeights = function(X, y, ...) rep(0, ncol(X)),
-    mcpWeights   = function(X, y, ...) rep(0, ncol(X)),
-    scadWeights  = function(X, y, ...) rep(0, ncol(X)),
-    l0learnWeights =function(X, y, ...) rep(0, ncol(X)),
-    susieWeights = function(X, y, ...) rep(0, ncol(X)),
-    susieInfWeights = function(X, y, ...) rep(0, ncol(X))
-  )
-
-  result <- pecotmr:::.twasWeightsPipelineMatrix(
-    d$X, y_vec, susieFit = NULL, cvFolds = 0,
-    weightMethods = "fast_default"
-  )
-
-  expected_methods <- c("susie", "susie_inf", "mrash",
-                        "enet", "lasso", "mcp",
-                        "scad", "l0learn")
-  expect_equal(sort(getMethodNames(result$twasWeights)), sort(expected_methods))
-})
-
-test_that("twasWeightsPipeline: accepts custom short-name vector", {
-  d <- make_data(n = 50, p = 10)
-  y_vec <- as.numeric(d$Y)
-
-  local_mocked_bindings(
-    lassoWeights = function(X, y, ...) rep(1, ncol(X)),
-    enetWeights  = function(X, y, ...) rep(2, ncol(X))
-  )
-
-  result <- pecotmr:::.twasWeightsPipelineMatrix(
-    d$X, y_vec, susieFit = NULL, cvFolds = 0,
-    weightMethods = c("lasso", "enet")
-  )
-
-  expect_equal(sort(getMethodNames(result$twasWeights)), sort(c("lasso", "enet")))
-})
-
-test_that("twasWeightsPipeline: with fitted_models stores SuSiE intermediates", {
-  d <- make_data(n = 50, p = 10)
-  y_vec <- as.numeric(d$Y)
-
-  fake_susie <- make_fake_susie_fit(p = 10, L = 5)
-  local_mocked_bindings(
-    enetWeights  = function(X, y, ...) rep(0, ncol(X)),
-    lassoWeights = function(X, y, ...) rep(0, ncol(X)),
-    bayesRWeights = function(X, y, ...) rep(0, ncol(X)),
-    bayesCWeights = function(X, y, ...) rep(0, ncol(X)),
-    mrashWeights = function(X, y, ...) rep(0, ncol(X)),
-    mcpWeights   = function(X, y, ...) rep(0, ncol(X)),
-    scadWeights  = function(X, y, ...) rep(0, ncol(X)),
-    l0learnWeights =function(X, y, ...) rep(0, ncol(X)),
-    susieWeights = function(X, y, ...) rep(0, ncol(X)),
-    susieInfWeights = function(X, y, ...) rep(0, ncol(X))
-  )
-
-  result <- pecotmr:::.twasWeightsPipelineMatrix(
-    d$X, y_vec,
-    fittedModels = list(susie = fake_susie),
-    cvFolds = 0,
-    estimatePi = FALSE
-  )
-
-  expect_true("susieWeightsIntermediate" %in% names(result))
-  expect_true("mu" %in% names(result$susieWeightsIntermediate))
-})
-
-test_that("twasWeightsPipeline: fitted_models are injected into SuSiE-family weights", {
-  d <- make_data(n = 50, p = 10)
-  y_vec <- as.numeric(d$Y)
-
-  fake_susie <- make_fake_susie_fit(p = 10, L = 5)
-  fake_susie_inf <- make_fake_susie_fit(p = 10, L = 5, inf = TRUE)
-
-  susie_received_fit <- FALSE
-  susie_inf_received_fit <- FALSE
-  local_mocked_bindings(
-    enetWeights  = function(X, y, ...) rep(0, ncol(X)),
-    lassoWeights = function(X, y, ...) rep(0, ncol(X)),
-    bayesRWeights = function(X, y, ...) rep(0, ncol(X)),
-    bayesCWeights = function(X, y, ...) rep(0, ncol(X)),
-    mrashWeights = function(X, y, ...) rep(0, ncol(X)),
-    mcpWeights   = function(X, y, ...) rep(0, ncol(X)),
-    scadWeights  = function(X, y, ...) rep(0, ncol(X)),
-    l0learnWeights =function(X, y, ...) rep(0, ncol(X)),
-    susieInfWeights = function(X, y, ...) {
-      args <- list(...)
-      if (!is.null(args$susieInfFit) && "susieInf" %in% class(args$susieInfFit)) {
-        susie_inf_received_fit <<- TRUE
-      }
-      rep(0, ncol(X))
-    },
-    susieWeights = function(X, y, ...) {
-      args <- list(...)
-      if (!is.null(args$susieFit) && "susie" %in% class(args$susieFit)) {
-        susie_received_fit <<- TRUE
-      }
-      rep(0, ncol(X))
-    }
-  )
-
-  result <- pecotmr:::.twasWeightsPipelineMatrix(
-    d$X, y_vec,
-    fittedModels = list(susie = fake_susie, susieInf = fake_susie_inf),
-    cvFolds = 0,
-    estimatePi = FALSE
-  )
-  expect_true(susie_received_fit)
-  expect_true(susie_inf_received_fit)
-})
 
 test_that("twasWeights: SuSiE-inf is fitted before and initializes ordinary SuSiE", {
   d <- make_data(n = 50, p = 10)
@@ -1112,26 +814,6 @@ test_that("twasWeights: SuSiE-inf is fitted before and initializes ordinary SuSi
   expect_equal(susie_calls[[2]]$L_greedy, 5)
 })
 
-test_that("twasWeightsPipeline: weight dimensions match input", {
-  d <- make_data(n = 50, p = 10)
-  y_vec <- as.numeric(d$Y)
-
-  local_mocked_bindings(
-    lassoWeights = function(X, y, ...) rep(0.5, ncol(X)),
-    enetWeights  = function(X, y, ...) rep(0.3, ncol(X))
-  )
-
-  result <- pecotmr:::.twasWeightsPipelineMatrix(
-    d$X, y_vec, susieFit = NULL, cvFolds = 0,
-    weightMethods = list(lassoWeights = list(), enetWeights = list())
-  )
-
-  for (method_name in getMethodNames(result$twasWeights)) {
-    w <- .weightsByMethod(result$twasWeights, method_name)
-    expect_equal(nrow(w), ncol(d$X))
-    expect_equal(ncol(w), 1)
-  }
-})
 
 # ===========================================================================
 # twasWeightsCv: extra split_data / sample-name / variant-selection branches
@@ -1249,55 +931,19 @@ test_that("twasWeightsCv: multivariate cv_args data_driven_prior_matrices_cv is 
     weightMethods = list(mrmashWeights = list()),
     data_driven_prior_matrices_cv = prior_cv
   )
-  # mrmashWeights mock should have been called and received the per-fold prior matrix
+  # mrmashWeights mock should have been called and received the per-fold prior
+  # matrix under the camelCase name that actually binds mrmashWrapper's
+  # `dataDrivenPriorMatrices` argument (the snake_case form was a latent no-op).
   expect_true(length(captured_args) >= 1)
   expect_true(any(vapply(captured_args, function(a)
-    "data_driven_prior_matrices" %in% names(a), logical(1))))
+    "dataDrivenPriorMatrices" %in% names(a), logical(1))))
 })
 
 # ===========================================================================
 # twasWeightsPipeline: removed_methods warning + max_cv_variants subsampling
 # ===========================================================================
 
-test_that("twasWeightsPipeline: warns when methods are removed because all weights are zero", {
-  d <- make_data(n = 30, p = 6)
-  local_mocked_bindings(
-    lassoWeights = function(X, y, ...) rep(0, ncol(X)),
-    enetWeights  = function(X, y, ...) rep(0, ncol(X))
-  )
-  set.seed(42)
-  expect_warning(
-    suppressMessages(pecotmr:::.twasWeightsPipelineMatrix(
-      d$X, d$Y, susieFit = NULL, cvFolds = 2,
-      weightMethods = list(lassoWeights = list(), enetWeights = list())
-    )),
-    "are removed from CV because all their weights are zeros"
-  )
-})
 
-test_that("twasWeightsPipeline: max_cv_variants subsamples colnames of X", {
-  d <- make_data(n = 30, p = 20)
-  captured_keep <- NULL
-  local_mocked_bindings(
-    lassoWeights = function(X, y, ...) {
-      w <- rep(0, ncol(X)); w[1] <- 0.5; w
-    },
-    twasWeightsCv = function(X, Y, fold, samplePartitions, weightMethods,
-                               maxNumVariants, numThreads, variantsToKeep, ...) {
-      captured_keep <<- variantsToKeep
-      list(samplePartition = data.frame(Sample = rownames(X), Fold = 1),
-           prediction = list(), performance = list(), timeElapsed = 0)
-    }
-  )
-  set.seed(42)
-  suppressMessages(suppressWarnings(pecotmr:::.twasWeightsPipelineMatrix(
-    d$X, d$Y, susieFit = NULL, cvFolds = 2,
-    weightMethods = list(lassoWeights = list()),
-    maxCvVariants = 5
-  )))
-  expect_equal(length(captured_keep), 5)
-  expect_true(all(captured_keep %in% colnames(d$X)))
-})
 
 # ===========================================================================
 # twasWeights: dim-fix branch when nrow(weights_matrix) != length(valid_columns)
@@ -1477,19 +1123,21 @@ test_that("TwasWeights: rejects duplicate 4-tuples", {
 
 test_that("TwasWeights: joint columns work the same as on the FMR class", {
   e <- .sc_makeTwasWeightsEntry()
+  # Univariate lasso at c1 + the c1 slice of an mr.mash joint over (c1, c2).
   tw <- TwasWeights(
     study   = c("s1", "s1"),
-    context = c("c1", "joint"),
+    context = c("c1", "c1"),
     trait   = c("t1", "t1"),
     method  = c("lasso", "mrmash"),
     entry   = list(e, e),
     jointContexts = c(NA_character_, "c1;c2"))
   expect_true("jointContexts" %in% names(tw))
   expect_identical(tw$jointContexts, c(NA_character_, "c1;c2"))
-  # uniqueness: distinct jointContexts -> distinct rows
+  # uniqueness: same (s1, c1, t1, mrmash) tuple from two joint fits over
+  # (c1, c2) and (c1, c3) -> distinct rows via jointContexts.
   tw2 <- TwasWeights(
     study   = c("s1", "s1"),
-    context = c("joint", "joint"),
+    context = c("c1", "c1"),
     trait   = c("t1", "t1"),
     method  = c("mrmash", "mrmash"),
     entry   = list(e, e),
@@ -1543,6 +1191,433 @@ test_that("show.TwasWeights reports ldSketch when present", {
     ldSketch = .sh_makeGenotypeHandle())
   out <- capture.output(show(tw))
   expect_true(any(grepl("LD sketch: gds @ /tmp/test.gds", out)))
+})
+
+# ===========================================================================
+#
+#  .normalizeCvFolds: fold-spec normalization (direct internal calls)
+#
+# ===========================================================================
+
+test_that(".normalizeCvFolds: list cvFolds + samplePartition are mutually exclusive", {
+  expect_error(
+    pecotmr:::.normalizeCvFolds(
+      cvFolds = list(c("s1", "s2"), c("s3", "s4")),
+      samplePartition = data.frame(Sample = "s1", Fold = 1)),
+    "not both"
+  )
+})
+
+test_that(".normalizeCvFolds: samplePartition must have Sample and Fold columns", {
+  expect_error(
+    pecotmr:::.normalizeCvFolds(samplePartition = data.frame(a = 1, b = 2)),
+    "must have columns"
+  )
+})
+
+test_that(".normalizeCvFolds: a sample assigned to >1 fold errors", {
+  sp <- data.frame(Sample = c("s1", "s1", "s2"), Fold = c(1, 2, 2),
+                   stringsAsFactors = FALSE)
+  expect_error(
+    pecotmr:::.normalizeCvFolds(samplePartition = sp),
+    "more than one fold"
+  )
+})
+
+test_that(".normalizeCvFolds: unknown sample (vs sampleNames) errors", {
+  sp <- data.frame(Sample = c("s1", "s99"), Fold = c(1, 2),
+                   stringsAsFactors = FALSE)
+  expect_error(
+    pecotmr:::.normalizeCvFolds(samplePartition = sp,
+                                sampleNames = c("s1", "s2")),
+    "unknown sample"
+  )
+})
+
+test_that(".normalizeCvFolds: uncovered samples error", {
+  sp <- data.frame(Sample = "s1", Fold = 1, stringsAsFactors = FALSE)
+  expect_error(
+    pecotmr:::.normalizeCvFolds(samplePartition = sp,
+                                sampleNames = c("s1", "s2", "s3")),
+    "does not cover"
+  )
+})
+
+test_that(".normalizeCvFolds: valid samplePartition returns df + nFolds", {
+  sp <- data.frame(Sample = c("s1", "s2", "s3", "s4"),
+                   Fold = c(1, 1, 2, 2), stringsAsFactors = FALSE)
+  res <- pecotmr:::.normalizeCvFolds(samplePartition = sp,
+                                     sampleNames = c("s1", "s2", "s3", "s4"))
+  expect_equal(res$nFolds, 2L)
+  expect_equal(nrow(res$samplePartition), 4L)
+  expect_setequal(unique(res$samplePartition$Fold), c(1, 2))
+})
+
+test_that(".normalizeCvFolds: list-form requires at least 2 folds", {
+  expect_error(
+    pecotmr:::.normalizeCvFolds(cvFolds = list(c("s1", "s2"))),
+    "at least 2 folds"
+  )
+})
+
+test_that(".normalizeCvFolds: numeric fold ids require sampleNames", {
+  expect_error(
+    pecotmr:::.normalizeCvFolds(cvFolds = list(c(1, 2), c(3, 4))),
+    "Numeric fold vectors require"
+  )
+})
+
+test_that(".normalizeCvFolds: numeric fold ids out of range error", {
+  expect_error(
+    pecotmr:::.normalizeCvFolds(
+      cvFolds = list(c(1, 2), c(3, 99)),
+      sampleNames = c("s1", "s2", "s3", "s4")),
+    "out-of-range"
+  )
+})
+
+test_that(".normalizeCvFolds: numeric fold ids resolve via sampleNames", {
+  res <- pecotmr:::.normalizeCvFolds(
+    cvFolds = list(c(1, 2), c(3, 4)),
+    sampleNames = c("s1", "s2", "s3", "s4"))
+  expect_equal(res$nFolds, 2L)
+  expect_setequal(res$samplePartition$Sample, c("s1", "s2", "s3", "s4"))
+  expect_equal(
+    res$samplePartition$Fold[res$samplePartition$Sample == "s1"], 1)
+})
+
+test_that(".normalizeCvFolds: character fold-id vectors are used as-is", {
+  res <- pecotmr:::.normalizeCvFolds(
+    cvFolds = list(c("s1", "s2"), c("s3", "s4")),
+    sampleNames = c("s1", "s2", "s3", "s4"))
+  expect_equal(res$nFolds, 2L)
+  expect_equal(nrow(res$samplePartition), 4L)
+})
+
+test_that(".normalizeCvFolds: integer cvFolds returns NULL partition + nFolds = k", {
+  res <- pecotmr:::.normalizeCvFolds(cvFolds = 5)
+  expect_null(res$samplePartition)
+  expect_equal(res$nFolds, 5L)
+})
+
+test_that(".normalizeCvFolds: a non-integer scalar cvFolds errors", {
+  expect_error(
+    pecotmr:::.normalizeCvFolds(cvFolds = "not_a_fold_spec"),
+    "single integer, a list of fold vectors"
+  )
+})
+
+# ===========================================================================
+#
+#  TwasWeights constructor: length-mismatch guards + accessors
+#
+# ===========================================================================
+
+test_that("TwasWeights: mismatched core-vector lengths error", {
+  e <- .sc_makeTwasWeightsEntry()
+  expect_error(
+    TwasWeights(study = c("s1", "s2"), context = "c1",
+                trait = "t1", method = "lasso", entry = list(e)),
+    "same length"
+  )
+})
+
+test_that("TwasWeights: joint* column length must match study", {
+  e <- .sc_makeTwasWeightsEntry()
+  expect_error(
+    TwasWeights(study = "s1", context = "c1", trait = "t1",
+                method = "lasso", entry = list(e),
+                jointStudies = c("a", "b")),
+    "same length as"
+  )
+})
+
+test_that("TwasWeights: getStandardized/getDataType/getVariantIds delegate to the entry", {
+  e1 <- TwasWeightsEntry(variantIds = paste0("v", 1:4), weights = rnorm(4),
+                         standardized = TRUE, dataType = "expression")
+  e2 <- TwasWeightsEntry(variantIds = paste0("v", 1:4), weights = rnorm(4),
+                         standardized = FALSE, dataType = "splicing")
+  tw <- TwasWeights(
+    study = c("s1", "s1"), context = c("c1", "c1"),
+    trait = c("t1", "t1"), method = c("lasso", "enet"),
+    entry = list(e1, e2))
+
+  expect_true(getStandardized(tw, study = "s1", context = "c1",
+                              trait = "t1", method = "lasso"))
+  expect_false(getStandardized(tw, study = "s1", context = "c1",
+                               trait = "t1", method = "enet"))
+  expect_equal(getDataType(tw, study = "s1", context = "c1",
+                           trait = "t1", method = "enet"), "splicing")
+  expect_equal(getVariantIds(tw, study = "s1", context = "c1",
+                             trait = "t1", method = "lasso"),
+               paste0("v", 1:4))
+})
+
+test_that("TwasWeights: getStudy returns unique study labels", {
+  e <- .sc_makeTwasWeightsEntry()
+  tw <- TwasWeights(
+    study = c("s1", "s2"), context = c("c1", "c2"),
+    trait = c("t1", "t1"), method = c("lasso", "lasso"),
+    entry = list(e, e))
+  expect_setequal(getStudy(tw), c("s1", "s2"))
+})
+
+test_that("TwasWeights: getWeights/getCvResult/getFits/getLdSketch delegate per tuple", {
+  w1 <- rnorm(4)
+  e1 <- TwasWeightsEntry(variantIds = paste0("v", 1:4), weights = w1,
+                         fits = list(tag = "fitA"),
+                         cvResult = list(rsq = 0.42))
+  e2 <- TwasWeightsEntry(variantIds = paste0("v", 1:4), weights = rnorm(4))
+  tw <- TwasWeights(
+    study = c("s1", "s1"), context = c("c1", "c1"),
+    trait = c("t1", "t1"), method = c("lasso", "enet"),
+    entry = list(e1, e2),
+    ldSketch = .sh_makeGenotypeHandle())
+
+  expect_equal(getWeights(tw, study = "s1", context = "c1",
+                          trait = "t1", method = "lasso"), w1)
+  expect_equal(getCvResult(tw, study = "s1", context = "c1",
+                           trait = "t1", method = "lasso")$rsq, 0.42)
+  expect_equal(getFits(tw, study = "s1", context = "c1",
+                       trait = "t1", method = "lasso")$tag, "fitA")
+  expect_s4_class(getLdSketch(tw), "GenotypeHandle")
+})
+
+# ===========================================================================
+#
+#  .resolveMethodFunction: unresolvable-key fallback
+#
+# ===========================================================================
+
+test_that(".resolveMethodFunction: unresolvable key falls back to the key itself", {
+  expect_equal(pecotmr:::.resolveMethodFunction("no_such_fn_xyz"),
+               "no_such_fn_xyz")
+})
+
+# ===========================================================================
+#
+#  .prepareSusieWeightMethods: seed susie from a supplied susieInf fit
+#
+# ===========================================================================
+
+test_that(".prepareSusieWeightMethods: seeds susie_weights from a supplied susieInf fit (vector Y)", {
+  d <- make_data(n = 40, p = 8)
+  y_vec <- as.numeric(d$Y)               # vector -> exercises the Y matrix coercion
+  infFit <- make_fake_susie_fit(p = 8, L = 3, inf = TRUE)
+
+  wm <- pecotmr:::.prepareSusieWeightMethods(
+    d$X, y_vec,
+    weightMethods = list(susie_weights = list(L = 5),
+                         susie_inf_weights = list()),
+    fittedModels = list(susieInf = infFit))
+
+  # The supplied susieInf fit is class-tagged and propagated onto susie_inf_weights,
+  # and susie_weights is rebuilt from it (model_init carries the inf fit).
+  expect_true("susieInf" %in% class(wm$susie_inf_weights$susieInfFit))
+  expect_true("susieInf" %in% class(wm$susie_weights$model_init))
+  expect_equal(wm$susie_weights$unmappable_effects, "none")
+})
+
+# ===========================================================================
+#
+#  twasWeightsCv: no-seed warning + multivariate/univariate fitter branches
+#
+# ===========================================================================
+
+test_that("twasWeightsCv: warns when no random seed has been set", {
+  d <- make_data(n = 20, p = 5)
+  # make_data() set a seed; drop it just before the call so the unset-seed
+  # branch (verbose>=1) is exercised. The fold-sampling at line ~713 restores
+  # .Random.seed afterwards, so later tests are unaffected.
+  if (exists(".Random.seed", envir = .GlobalEnv))
+    rm(".Random.seed", envir = .GlobalEnv)
+  expect_message(
+    twasWeightsCv(d$X, d$Y, fold = 2, weightMethods = NULL),
+    "No seed has been set"
+  )
+})
+
+test_that("twasWeightsCv: mvsusie per-fold reweighted prior is plumbed (verbose=2)", {
+  set.seed(42)
+  n <- 24; p <- 4
+  X <- matrix(rnorm(n * p), nrow = n)
+  colnames(X) <- paste0("v", seq_len(p)); rownames(X) <- paste0("s", seq_len(n))
+  Y <- matrix(rnorm(n * 2), nrow = n)
+  colnames(Y) <- c("y1", "y2"); rownames(Y) <- rownames(X)
+
+  captured <- list()
+  local_mocked_bindings(
+    mvsusieWeights = function(X, Y, ...) {
+      captured[[length(captured) + 1]] <<- list(...)
+      matrix(0, nrow = ncol(X), ncol = ncol(Y),
+             dimnames = list(colnames(X), colnames(Y)))
+    }
+  )
+  prior_cv <- list(matrix(1, 2, 2), matrix(2, 2, 2))
+  set.seed(1)
+  result <- suppressMessages(twasWeightsCv(
+    X, Y, fold = 2,
+    weightMethods = list(mvsusieWeights = list()),
+    reweightedMixturePriorCv = prior_cv,
+    verbose = 2))
+  expect_true("prediction" %in% names(result))
+  # the per-fold prior_variance was forwarded to the multivariate fitter
+  expect_true(any(vapply(captured, function(a)
+    "prior_variance" %in% names(a), logical(1))))
+})
+
+test_that("twasWeightsCv: retainFits forwards retainFit to a multivariate fitter that supports it", {
+  set.seed(42)
+  n <- 24; p <- 4
+  X <- matrix(rnorm(n * p), nrow = n)
+  colnames(X) <- paste0("v", seq_len(p)); rownames(X) <- paste0("s", seq_len(n))
+  Y <- matrix(rnorm(n * 2), nrow = n)
+  colnames(Y) <- c("y1", "y2"); rownames(Y) <- rownames(X)
+
+  captured <- list()
+  local_mocked_bindings(
+    mrmashWeights = function(X, Y, retainFit = FALSE, ...) {
+      captured[[length(captured) + 1]] <<- list(retainFit = retainFit)
+      matrix(0, nrow = ncol(X), ncol = ncol(Y),
+             dimnames = list(colnames(X), colnames(Y)))
+    }
+  )
+  set.seed(1)
+  result <- suppressMessages(twasWeightsCv(
+    X, Y, fold = 2,
+    weightMethods = list(mrmashWeights = list()),
+    retainFits = TRUE))
+  expect_true("foldFits" %in% names(result))
+  expect_true(all(vapply(captured, function(a) isTRUE(a$retainFit), logical(1))))
+})
+
+test_that("twasWeightsCv: univariate fitter runs under verbose=2 (no quiet wrapper)", {
+  d <- make_data(n = 30, p = 6)
+  local_mocked_bindings(
+    lassoWeights = function(X, y, ...) { w <- rep(0, ncol(X)); w[1] <- 0.3; w }
+  )
+  set.seed(1)
+  result <- suppressMessages(twasWeightsCv(
+    d$X, d$Y, fold = 2,
+    weightMethods = list(lassoWeights = list()),
+    verbose = 2))
+  expect_true("prediction" %in% names(result))
+  expect_equal(nrow(result$prediction[["lassoPredicted"]]), nrow(d$X))
+})
+
+test_that("twasWeightsCv: parallel fold path (numThreads = 2)", {
+  d <- make_data(n = 30, p = 6)
+  local_mocked_bindings(
+    lassoWeights = function(X, y, ...) { w <- rep(0, ncol(X)); w[1] <- 0.4; w }
+  )
+  set.seed(1)
+  result <- suppressMessages(twasWeightsCv(
+    d$X, d$Y, fold = 2,
+    weightMethods = list(lassoWeights = list()),
+    numThreads = 2))
+  expect_true("prediction" %in% names(result))
+  expect_equal(nrow(result$prediction[["lassoPredicted"]]), nrow(d$X))
+})
+
+# ===========================================================================
+#
+#  learnTwasWeights: retainFits plumbing + verbose=2 + parallel
+#
+# ===========================================================================
+
+test_that("learnTwasWeights: multivariate fitter with retainFits + verbose=2 (fitDetail forwarded)", {
+  set.seed(42)
+  n <- 24; p <- 5
+  X <- matrix(rnorm(n * p), nrow = n)
+  colnames(X) <- paste0("v", seq_len(p)); rownames(X) <- paste0("s", seq_len(n))
+  Y <- matrix(rnorm(n * 2), nrow = n)
+  colnames(Y) <- c("y1", "y2")
+
+  captured <- list()
+  local_mocked_bindings(
+    mrmashWeights = function(X, Y, retainFit = FALSE,
+                             fitDetail = c("slim", "full"), ...) {
+      captured[[length(captured) + 1]] <<-
+        list(retainFit = retainFit, fitDetail = fitDetail)
+      matrix(0, nrow = ncol(X), ncol = ncol(Y),
+             dimnames = list(colnames(X), colnames(Y)))
+    }
+  )
+  result <- suppressMessages(learnTwasWeights(
+    X, Y,
+    weightMethods = list(mrmashWeights = list()),
+    retainFits = TRUE, verbose = 2))
+  expect_true(is(result, "TwasWeights"))
+  expect_true(isTRUE(captured[[1]]$retainFit))
+  expect_equal(captured[[1]]$fitDetail, "slim")
+})
+
+test_that("learnTwasWeights: legacy retain_fit alias is forwarded to methods exposing it", {
+  d <- make_data(n = 30, p = 6)
+  captured <- list()
+  local_mocked_bindings(
+    bayesRWeights = function(X, y, retain_fit = FALSE, ...) {
+      captured[[length(captured) + 1]] <<- list(retain_fit = retain_fit)
+      rep(0, ncol(X))
+    }
+  )
+  result <- suppressMessages(learnTwasWeights(
+    d$X, d$Y,
+    weightMethods = list(bayesRWeights = list()),
+    retainFits = TRUE))
+  expect_true(is(result, "TwasWeights"))
+  expect_true(isTRUE(captured[[1]]$retain_fit))
+})
+
+test_that("learnTwasWeights: univariate fitter runs under verbose=2", {
+  d <- make_data(n = 30, p = 6)
+  local_mocked_bindings(
+    lassoWeights = function(X, y, ...) rep(0.2, ncol(X))
+  )
+  result <- suppressMessages(learnTwasWeights(
+    d$X, d$Y,
+    weightMethods = list(lassoWeights = list()),
+    verbose = 2))
+  expect_true(is(result, "TwasWeights"))
+  expect_equal(nrow(.weightsByMethod(result, "lassoWeights")), ncol(d$X))
+})
+
+test_that("learnTwasWeights: parallel weights path (numThreads = 2)", {
+  d <- make_data(n = 30, p = 6)
+  local_mocked_bindings(
+    lassoWeights = function(X, y, ...) rep(0.1, ncol(X)),
+    enetWeights  = function(X, y, ...) rep(0.2, ncol(X))
+  )
+  result <- suppressMessages(learnTwasWeights(
+    d$X, d$Y,
+    weightMethods = list(lassoWeights = list(), enetWeights = list()),
+    numThreads = 2))
+  expect_true(is(result, "TwasWeights"))
+  expect_setequal(getMethodNames(result), c("lasso", "enet"))
+})
+
+# ===========================================================================
+#
+#  twasPredict: TwasWeights S4-collection path
+#
+# ===========================================================================
+
+test_that("twasPredict: accepts a TwasWeights S4 collection", {
+  set.seed(42)
+  p <- 5
+  w1 <- rnorm(p); w2 <- rnorm(p)
+  e1 <- TwasWeightsEntry(variantIds = paste0("v", seq_len(p)), weights = w1)
+  e2 <- TwasWeightsEntry(variantIds = paste0("v", seq_len(p)), weights = w2)
+  tw <- TwasWeights(
+    study = c("s1", "s1"), context = c("c1", "c1"),
+    trait = c("t1", "t1"), method = c("lasso", "enet"),
+    entry = list(e1, e2))
+
+  X <- matrix(rnorm(8 * p), nrow = 8, ncol = p)
+  res <- twasPredict(X, tw)
+  expect_equal(names(res), c("lasso_predicted", "enet_predicted"))
+  expect_equal(res[["lasso_predicted"]], X %*% matrix(w1, ncol = 1))
+  expect_equal(res[["enet_predicted"]], X %*% matrix(w2, ncol = 1))
 })
 
 

@@ -116,9 +116,11 @@ test_that("QtlFineMappingResult: joint columns absent by default", {
 
 test_that("QtlFineMappingResult: accepts jointContexts column", {
   e <- .sc_makeFineMappingEntry(3)
+  # Univariate susie at c1 + the c1 slice of an mvsusie joint over (c1, c2):
+  # both real context c1, distinguished by method and the jointContexts tag.
   res <- QtlFineMappingResult(
     study   = c("s1", "s1"),
-    context = c("c1", "joint"),
+    context = c("c1", "c1"),
     trait   = c("t1", "t1"),
     method  = c("susie", "mvsusie"),
     entry   = list(e, e),
@@ -130,10 +132,13 @@ test_that("QtlFineMappingResult: accepts jointContexts column", {
 
 test_that("QtlFineMappingResult: jointStudies + jointTraits combine cleanly", {
   e <- .sc_makeFineMappingEntry(3)
+  # Three per-context rows sharing the real (s1, c1, t1) tuple, each a slice of
+  # a different joint fit: univariate; a cross-study+trait mvsusieRss; a
+  # cross-context mvsusie. The joint* tags carry each fit's co-fit membership.
   res <- QtlFineMappingResult(
-    study   = c("s1", "joint", "joint"),
-    context = c("c1", "c1", "joint"),
-    trait   = c("t1", "joint", "t1"),
+    study   = c("s1", "s1", "s1"),
+    context = c("c1", "c1", "c1"),
+    trait   = c("t1", "t1", "t1"),
     method  = c("susie", "mvsusieRss", "mvsusie"),
     entry   = list(e, e, e),
     jointStudies  = c(NA_character_, "s1;s2", NA_character_),
@@ -149,10 +154,12 @@ test_that("QtlFineMappingResult: jointStudies + jointTraits combine cleanly", {
 
 test_that("QtlFineMappingResult: uniqueness distinguishes joint members", {
   e <- .sc_makeFineMappingEntry(3)
-  # same 4-tuple but different jointContexts -> distinct
+  # Real scenario: context c1 participates in two different mvsusie joint fits
+  # -- one over (c1, c2), one over (c1, c3) -- producing two c1 rows with the
+  # same 4-tuple, kept distinct only by their jointContexts membership.
   res <- QtlFineMappingResult(
     study   = c("s1", "s1"),
-    context = c("joint", "joint"),
+    context = c("c1", "c1"),
     trait   = c("t1", "t1"),
     method  = c("mvsusie", "mvsusie"),
     entry   = list(e, e),
@@ -162,7 +169,7 @@ test_that("QtlFineMappingResult: uniqueness distinguishes joint members", {
   expect_error(
     QtlFineMappingResult(
       study   = c("s1", "s1"),
-      context = c("joint", "joint"),
+      context = c("c1", "c1"),
       trait   = c("t1", "t1"),
       method  = c("mvsusie", "mvsusie"),
       entry   = list(e, e),
@@ -308,6 +315,25 @@ test_that("getCvResult works at the QtlFineMappingResult collection level", {
   expect_identical(
     getCvResult(fmr, study = "S", context = "C", trait = "T", method = "susie"),
     cv)
+})
+
+
+test_that("QtlFineMappingResult: getMarginalEffects with tuple selectors", {
+  e1 <- .ca_makeFmEntry(3)
+  e2 <- .ca_makeFmEntry(4)
+  res <- QtlFineMappingResult(
+    study   = c("s1", "s1"),
+    context = c("c1", "c2"),
+    trait   = c("t1", "t1"),
+    method  = c("susie", "susie"),
+    entry   = list(e1, e2))
+  # Collection-level selection picks the (s1, c2, t1, susie) entry, then
+  # delegates to the entry-level getMarginalEffects.
+  me <- getMarginalEffects(res, study = "s1", context = "c2",
+                           trait = "t1", method = "susie")
+  expect_s3_class(me, "data.frame")
+  expect_equal(nrow(me), 4L)
+  expect_true(all(c("variant_id", "beta", "se", "z", "p") %in% names(me)))
 })
 
 # ===========================================================================
