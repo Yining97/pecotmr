@@ -30,6 +30,11 @@
 #'           variant of the same.}
 #'     \item{\code{susieAsh}}{\code{unmappable_effects = "ash"}
 #'           variant of the same.}
+#'     \item{\code{ser}}{Single-effect regression via
+#'           \code{susieR::susie_ser} on GWAS summary statistics
+#'           (\code{z}, \code{n}); LD-free (no \code{R}, no \code{L}),
+#'           so distinct from \code{susie} with \code{L = 1}.
+#'           \strong{GwasSumStats input only}; errors on QTL inputs.}
 #'     \item{\code{mvsusie}}{\code{mvsusieR::mvsusie} on individual-
 #'           level input (requires multi-trait OR multi-context Y),
 #'           \code{mvsusieR::mvsusie_rss} on sumstat input (requires
@@ -290,6 +295,19 @@ setGeneric("fineMappingPipeline",
     gwasAllowed       = TRUE,
     unmappableEffects = "ash",
     args              = list()),
+  # Single-effect regression (SER) on GWAS summary statistics via
+  # susieR::susie_ser. LD-free (z + n; no R, no L), so it is distinct from
+  # susie with L = 1. GWAS-only for now (gwasOnly = TRUE); individualImpl is
+  # NULL so the QtlDataset paths reject it, and gwasOnly makes QtlSumStats
+  # reject it too.
+  ser = list(
+    individualImpl    = NULL,
+    sumstatImpl       = "susieR::susie_ser",
+    multivariate      = FALSE,
+    gwasAllowed       = TRUE,
+    gwasOnly          = TRUE,
+    unmappableEffects = NA_character_,
+    args              = list()),
   mvsusie = list(
     individualImpl    = "mvsusieR::mvsusie",
     sumstatImpl       = "mvsusieR::mvsusie_rss",
@@ -390,6 +408,11 @@ setGeneric("fineMappingPipeline",
       next
     }
     info <- caps[[tk]]
+    if (isTRUE(info$gwasOnly) && inputKind != "GwasSumStats") {
+      bad <- c(bad, tk)
+      reason <- c(reason, "is GWAS-only (requires a GwasSumStats input)")
+      next
+    }
     if (inputKind %in% individualKinds) {
       if (is.null(info$individualImpl)) {
         bad <- c(bad, tk)
@@ -1119,6 +1142,19 @@ setGeneric("fineMappingPipeline",
   # All susie_rss fits get the "susieRss" S3 class for post-processing
   # (this drives the Xcorr cs-input mode). Token-level distinction stays
   # in the `method` column of the FineMappingResult.
+  .setFinemappingFitClass(fit, "susieRss")
+}
+
+
+# Single-effect (SER) sumstat fit for GWAS: susieR::susie_ser on z + n. LD-free
+# (no R, no L, no unmappable_effects), so it cannot reuse .fmFitSusieRss. Returns
+# a susie-class object tagged "susieRss" so the shared post-processing (credible
+# sets + purity against the LD sketch) applies unchanged.
+# @noRd
+.fmFitSusieSer <- function(z, n, coverage = 0.95, userArgs = NULL) {
+  baseArgs <- list(z = z, n = n, coverage = coverage)
+  baseArgs <- .fmMergeUserArgs(baseArgs, "ser", userArgs)
+  fit <- do.call(susieR::susie_ser, baseArgs)
   .setFinemappingFitClass(fit, "susieRss")
 }
 
@@ -2112,6 +2148,12 @@ setMethod("fineMappingPipeline", "GwasSumStats",
         if (tk == "susieInf") {
           if (!chainLocal$keepInf) next
           fit <- infFit
+        } else if (tk == "ser") {
+          if (verbose >= 1)
+            message(sprintf("Fitting ser (RSS single-effect) for GWAS (study='%s', region='%s') ...",
+                            st, region_id))
+          fit <- .fmFitSusieSer(z, n, coverage = coverage,
+                                userArgs = methodArgs[["ser"]])
         } else {
           chainFrom <- if ((tk == "susie"    && chainLocal$chainSusie) ||
                            (tk == "susieAsh" && chainLocal$chainAsh))

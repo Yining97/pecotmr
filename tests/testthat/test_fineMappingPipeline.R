@@ -1438,6 +1438,33 @@ test_that("fineMappingPipeline(GwasSumStats): non-RSS family rejected by capabil
   )
 })
 
+test_that("fineMappingPipeline(GwasSumStats): ser dispatches to susie_ser", {
+  gss <- .fmp_makeGwasSumStats()
+  local_mocked_bindings(
+    extractBlockGenotypes = .fmp_mockExtractor(),
+    .fmFitSusieSer        = function(z, n, coverage = 0.95, userArgs = NULL)
+                              list(token = "ser", n_variants = length(z)),
+    .fmPostprocessOne     = .fmp_mockPostprocess(),
+    .package = "pecotmr")
+  res <- suppressMessages(fineMappingPipeline(gss, methods = "ser"))
+  expect_s4_class(res, "GwasFineMappingResult")
+  expect_equal(nrow(res), 1L)
+  expect_setequal(getMethodNames(res), "ser")
+})
+
+test_that(".fmCheckMethodCapabilities: ser is GWAS-only", {
+  expect_error(pecotmr:::.fmCheckMethodCapabilities("ser", "QtlSumStats"), "GWAS-only")
+  expect_error(pecotmr:::.fmCheckMethodCapabilities("ser", "QtlDataset"),  "GWAS-only")
+  expect_error(pecotmr:::.fmCheckMethodCapabilities("ser", "MultiStudyQtlDataset"), "GWAS-only")
+  expect_silent(pecotmr:::.fmCheckMethodCapabilities("ser", "GwasSumStats"))
+})
+
+test_that(".fmNormalizeMethods: ser is not seeded with L / L_greedy", {
+  norm <- pecotmr:::.fmNormalizeMethods("ser", L = 20L, Lgreedy = 5L)
+  expect_null(norm$methodArgs[["ser"]][["L"]])
+  expect_null(norm$methodArgs[["ser"]][["L_greedy"]])
+})
+
 # ===========================================================================
 # fineMappingPipeline(ANY)
 # ===========================================================================
